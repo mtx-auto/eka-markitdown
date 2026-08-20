@@ -209,85 +209,58 @@ async def list_supported_formats() -> str:
 
 
 @mcp.tool
-async def convert_file(source: str) -> str:
-    """Convert a document from a URL to Markdown format.
-
-    Downloads the file from the given URL and converts it using Microsoft
-    MarkItDown. Supported formats: PDF, PowerPoint, Word, Excel, HTML, EPUB,
-    images (EXIF + OCR), audio (EXIF + speech), CSV, JSON, XML, ZIP archives,
-    and YouTube URLs.
-
-    Args:
-        source: An HTTP(S) URL pointing to a document file. The file extension
-            is used to determine the conversion method.
-
-    Returns:
-        The Markdown-converted content of the document.
-
-    Raises:
-        ValueError: If the URL cannot be downloaded or the format is not
-            supported.
-    """
-    if not source.startswith(("http://", "https://")):
-        raise ValueError(
-            "source must be an HTTP or HTTPS URL. "
-            "Use convert_file_from_dial for DIAL file references."
-        )
-
-    try:
-        content, _ = await _download_from_url(source)
-    except httpx.HTTPError as e:
-        raise ValueError(f"Failed to download {source}: {e}") from e
-
-    filename = source.rstrip("/").split("/")[-1] or "document"
-    return _convert_bytes(content, filename)
-
-
-@mcp.tool
-async def convert_file_from_dial(
-    file_path: Annotated[
+async def convert_file(
+    source: Annotated[
         str,
         Field(
             description=(
-                "A DIAL file path (e.g. ``files/private/report.pdf`` or "
-                "``files/public/notes.docx`` — no scheme or host; pass this "
-                "path exactly as given, do not inline its bytes or base64-encode "
-                "it). The file will be downloaded from DIAL Core and converted "
-                "to Markdown."
+                "An HTTP(S) URL pointing to a document file, or a DIAL file "
+                "path (e.g. ``files/private/report.pdf`` or "
+                "``files/public/notes.docx``). The file extension is used to "
+                "determine the conversion method. For DIAL paths, pass the "
+                "path exactly as given — do not inline its bytes or "
+                "base64-encode it."
             ),
             json_schema_extra={"dial_url": True},
         ),
     ],
 ) -> str:
-    """Convert a DIAL file attachment to Markdown format.
+    """Convert a document to Markdown format.
 
-    Downloads the file from DIAL Core using the forwarded authentication and
-    converts it using Microsoft MarkItDown. Supports the same formats as
-    convert_file.
+    Accepts either a public HTTP(S) URL or a DIAL file path (``files/...``).
+    Downloads the file and converts it using Microsoft MarkItDown. Supported
+    formats: PDF, PowerPoint, Word, Excel, HTML, EPUB, images (EXIF + OCR),
+    audio (EXIF + speech), CSV, JSON, XML, ZIP archives, and YouTube URLs.
 
     Args:
-        file_path: A DIAL file path (e.g. ``files/private/report.pdf``). Must
-            start with ``files/``.
+        source: An HTTP(S) URL or a DIAL file path (``files/<bucket>/<path>``).
 
     Returns:
         The Markdown-converted content of the document.
 
     Raises:
-        ValueError: If the path is invalid, auth fails, download fails, or
-            conversion fails.
+        ValueError: If the source cannot be downloaded or the format is not
+            supported.
     """
-    if not file_path.startswith("files/"):
+    if source.startswith(("http://", "https://")):
+        try:
+            content, _ = await _download_from_url(source)
+        except httpx.HTTPError as e:
+            raise ValueError(f"Failed to download {source}: {e}") from e
+        filename = source.rstrip("/").split("/")[-1] or "document"
+    elif source.startswith("files/"):
+        try:
+            content, _ = await _download_from_dial(source)
+        except httpx.HTTPError as e:
+            raise ValueError(
+                f"Failed to download {source} from DIAL Core: {e}"
+            ) from e
+        filename = source.rstrip("/").split("/")[-1] or "document"
+    else:
         raise ValueError(
-            "file_path must start with 'files/'. "
-            "Use convert_file for HTTP URLs."
+            "source must be an HTTP(S) URL or a DIAL file path (starting with 'files/')."
         )
 
-    try:
-        content, _ = await _download_from_dial(file_path)
-    except httpx.HTTPError as e:
-        raise ValueError(f"Failed to download {file_path} from DIAL Core: {e}") from e
-
-    filename = file_path.rstrip("/").split("/")[-1] or "document"
     return _convert_bytes(content, filename)
 
 
