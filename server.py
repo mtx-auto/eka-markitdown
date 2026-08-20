@@ -242,6 +242,37 @@ async def convert_file(
         ValueError: If the source cannot be downloaded or the format is not
             supported.
     """
+    # Handle inline content passed via file:data:: or file:base64:: prefix
+    if source.startswith("file:data::"):
+        # data URI — extract the base64 after the comma
+        _, data_part = source.split("::", 1)
+        if "," in data_part:
+            data_part = data_part.split(",", 1)[1]
+        import base64
+        content = base64.b64decode(data_part)
+        # Try to determine filename from content type in data URI
+        filename = "document"
+        if ";" in source:
+            ext_map = {"application/pdf": ".pdf", "image/png": ".png", "image/jpeg": ".jpg",
+                       "text/html": ".html", "text/plain": ".txt", "application/json": ".json"}
+            for mime, ext in ext_map.items():
+                if mime in source:
+                    filename = f"document{ext}"
+                    break
+        return _convert_bytes(content, filename)
+
+    if source.startswith("file:base64::"):
+        # plain base64 content
+        _, content_b64 = source.split("::", 1)
+        import base64
+        content = base64.b64decode(content_b64)
+        return _convert_bytes(content, "document")
+
+    if source.startswith("file:text::"):
+        # raw text content
+        _, text = source.split("::", 1)
+        return _convert_bytes(text.encode("utf-8"), "document.txt")
+
     if source.startswith(("http://", "https://")):
         try:
             content, _ = await _download_from_url(source)
