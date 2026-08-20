@@ -25,7 +25,7 @@ mcp = FastMCP(
 # Constants
 # ---------------------------------------------------------------------------
 DIAL_CORE_BASE_URL = os.environ.get("DIAL_CORE_BASE_URL", "https://core.aks.dev.dial.parts")
-AUTH_HEADER_NAMES = ["Api-Key"]
+AUTH_HEADER_NAMES = ["Api-Key", "Authorization", "X-Api-Key"]
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -221,7 +221,10 @@ async def convert_file(
                 "path exactly as given — do not inline its bytes or "
                 "base64-encode it."
             ),
-            json_schema_extra={"dial_url": True},
+            # No dial_url — the MCP server handles DIAL file downloads
+            # directly using the per-request auth headers forwarded by
+            # the toolset's forward_per_request_key setting.
+            # json_schema_extra={"dial_url": True},
         ),
     ],
 ) -> str:
